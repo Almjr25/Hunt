@@ -111,9 +111,9 @@ test('purchases debit coins, respect limits and reject insufficient funds and un
 });
 test('maximum walking upgrade outruns monsters, lower levels do not, and invalid saves normalize',()=>{
  const p=normalizeProfile({coins:-1,walk:99,stamina:99,lure:'3',repair:Infinity});
- assert.deepEqual(p,{coins:0,walk:3,stamina:3,lure:0,repair:0});
+ assert.deepEqual(p,{coins:0,walk:3,stamina:3,lure:0,repair:0,pit:0,fire:0,rock:0});
  assert.equal(playerStats(p).stamina,160);assert.equal(playerStats(p).walk,179);assert.ok(playerStats(p).walk>SPEED.monster);assert.ok(playerStats({...p,walk:2}).walk<SPEED.monster);
- assert.deepEqual(normalizeProfile(null),{coins:0,stamina:0,walk:0,lure:0,repair:0});
+ assert.deepEqual(normalizeProfile(null),{coins:0,stamina:0,walk:0,lure:0,repair:0,pit:0,fire:0,rock:0});
 });
 test('each kill rewards fifty coins and consumables spend once without altering upgrades',()=>{
  let p=normalizeProfile({stamina:2,lure:1});p=rewardKill(p);assert.equal(p.coins,50);
@@ -149,4 +149,32 @@ test('random traps keep two of each type and clear approach space across rounds'
  }
  assert.equal(layouts.size,300);
  assert.equal(generateTraps(walls,player,enemies,()=>.5).length,6);
+});
+
+import {WORLD,cameraFor,generateWalls,placeTrap} from './game.js';
+test('expanded world and camera clamp at world edges',()=>{
+ assert.ok(WORLD.width*WORLD.height/(1000*620)>=6);
+ assert.deepEqual(cameraFor({x:0,y:0}),{x:0,y:0});
+ assert.deepEqual(cameraFor({x:2500,y:1500}),{x:1500,y:880});
+ assert.equal(blocked(1200,800,11,[]),false);assert.equal(blocked(2495,800,11,[]),true);
+});
+test('random obstacles keep spawns and passageways free in the expanded terrain',()=>{
+ let seed=77;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+ const spawns=[{x:1250,y:1350},{x:375,y:250},{x:1250,y:200},{x:2125,y:250}];
+ const layouts=new Set();
+ for(let i=0;i<100;i++){const walls=generateWalls(spawns,random);assert.equal(walls.length,28);layouts.add(JSON.stringify(walls));
+  for(const p of spawns)assert.equal(blocked(p.x,p.y,150,walls),false);
+  for(const w of walls){assert.ok(w.x>=0&&w.y>=0&&w.x+w.w<WORLD.width&&w.y+w.h<WORLD.height);for(const o of walls)if(o!==w)assert.ok(w.x>=o.x+o.w+100||w.x+w.w<=o.x-100||w.y>=o.y+o.h+100||w.y+w.h<=o.y-100);}
+  assert.equal(generateTraps(walls,spawns[0],spawns.slice(1),random).length,6);
+ }assert.equal(layouts.size,100);
+});
+test('portable traps cost 300, migrate old saves, and spend only on valid placement',()=>{
+ const old=normalizeProfile({coins:900});assert.equal(old.pit,0);
+ const player={x:1000,y:1000,angle:0},traps=[];
+ for(const type of ['pit','fire','rock']){assert.equal(SHOP[type].price,300);const bought=buyItem(old,type);assert.equal(bought.coins,600);assert.equal(bought[type],1);
+  const result=placeTrap(bought,type,player,[],traps);assert.equal(result[type],0);assert.equal(traps[0].x,1085);assert.equal(traps[0].armed,false);traps.length=0;}
+ const p=normalizeProfile({pit:1});assert.equal(placeTrap(p,'pit',player,[{x:1050,y:950,w:100,h:100}],[]),null);assert.equal(p.pit,1);
+ assert.equal(placeTrap(p,'pit',{x:20,y:20,angle:Math.PI},[],[]),null);
+ assert.equal(placeTrap(p,'pit',player,[],[{x:1080,y:1000}]),null);
+ assert.equal(placeTrap(normalizeProfile(null),'pit',player,[],[]),null);
 });

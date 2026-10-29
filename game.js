@@ -6,9 +6,23 @@ export const BIOMES = [
  {name:'CALDEIRA VULCÂNICA',bg:'#302326',grid:'#403034',wall:'#624248',accent:'#efad82'},
  {name:'RUÍNAS ESQUECIDAS',bg:'#2c2b32',grid:'#38363f',wall:'#555160',accent:'#cfb5e8'}
 ];
+export const WORLD={width:2500,height:1500};
+export function cameraFor(player){return {x:Math.max(0,Math.min(WORLD.width-1000,player.x-500)),y:Math.max(0,Math.min(WORLD.height-620,player.y-310))};}
+export function generateWalls(spawns,random=Math.random){
+ const walls=[];
+ for(let i=0;i<28;i++){
+  for(let attempt=0;attempt<500;attempt++){
+   const w={x:70+random()*(WORLD.width-300),y:70+random()*(WORLD.height-300),w:55+random()*90,h:45+random()*100};
+   if(spawns.some(p=>p.x>w.x-180&&p.x<w.x+w.w+180&&p.y>w.y-180&&p.y<w.y+w.h+180))continue;
+   if(walls.some(o=>w.x<o.x+o.w+100&&w.x+w.w>o.x-100&&w.y<o.y+o.h+100&&w.y+w.h>o.y-100))continue;
+   walls.push(w);break;
+  }
+ }
+ return walls;
+}
 export const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export function trapHits(trap, enemy){return trap.armed&&!trap.used&&distance(trap,enemy)<trap.r+12;}
-export function blocked(x,y,r,walls){return x<r||y<r||x>1000-r||y>620-r||walls.some(w=>x+r>w.x&&x-r<w.x+w.w&&y+r>w.y&&y-r<w.y+w.h);}
+export function blocked(x,y,r,walls){return x<r||y<r||x>WORLD.width-r||y>WORLD.height-r||walls.some(w=>x+r>w.x&&x-r<w.x+w.w&&y+r>w.y&&y-r<w.y+w.h);}
 export function lineClear(a,b,walls){const n=Math.ceil(distance(a,b)/8);for(let i=1;i<n;i++){const x=a.x+(b.x-a.x)*i/n,y=a.y+(b.y-a.y)*i/n;if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h))return false;}return true;}
 export const SPEED = {walk:140, run:240, monster:175};
 export const LURE_RANGE=900;
@@ -17,8 +31,8 @@ export function generateTraps(walls,player,enemies,random=Math.random){
  const valid=p=>!blocked(p.x,p.y,65,walls)&&distance(p,player)>100&&enemies.every(e=>distance(p,e)>85)&&traps.every(t=>distance(p,t)>125);
  for(const type of ['pit','fire','rock','pit','fire','rock']){
   let spot;
-  for(let attempt=0;attempt<500;attempt++){const p={x:70+random()*860,y:70+random()*480};if(valid(p)){spot=p;break;}}
-  if(!spot)for(let y=70;y<=550&&!spot;y+=25)for(let x=70;x<=930;x+=25){const p={x,y};if(valid(p)){spot=p;break;}}
+  for(let attempt=0;attempt<500;attempt++){const p={x:70+random()*(WORLD.width-140),y:70+random()*(WORLD.height-140)};if(valid(p)){spot=p;break;}}
+  if(!spot)for(let y=70;y<=WORLD.height-70&&!spot;y+=25)for(let x=70;x<=WORLD.width-70;x+=25){const p={x,y};if(valid(p)){spot=p;break;}}
   if(!spot)throw new Error('No safe space for traps');
   traps.push({...spot,type,r:27,armed:false,used:false,progress:0,flash:0});
  }
@@ -54,9 +68,9 @@ export function generateClues(walls,traps,random=Math.random){
  const valid=p=>!blocked(p.x,p.y,22,walls)&&traps.every(t=>distance(p,t)>t.r+30)&&clues.every(c=>distance(p,c)>45);
  for(const kind of ENEMY_TYPES){
   let spot;
-  for(let attempt=0;attempt<1000;attempt++){const p={x:24+random()*952,y:24+random()*572};if(valid(p)){spot=p;break;}}
+  for(let attempt=0;attempt<1000;attempt++){const p={x:24+random()*(WORLD.width-48),y:24+random()*(WORLD.height-48)};if(valid(p)){spot=p;break;}}
   // Bounded fallback also handles a random source repeatedly returning one position.
-  if(!spot){for(let y=30;y<600&&!spot;y+=30)for(let x=30;x<980;x+=30){const p={x,y};if(valid(p)){spot=p;break;}}}
+  if(!spot){for(let y=30;y<WORLD.height-24&&!spot;y+=30)for(let x=30;x<WORLD.width-24;x+=30){const p={x,y};if(valid(p)){spot=p;break;}}}
   if(!spot)throw new Error('No reachable space for clue');
   clues.push({...spot,kind,collected:false});
  }
@@ -71,10 +85,13 @@ export const SHOP = {
  stamina:{name:'Reserva de fôlego',price:75,max:3,description:'+20 de fôlego máximo por nível. Permanente.'},
  walk:{name:'Passos leves',price:100,max:3,description:'+13 de velocidade de caminhada por nível. No máximo, ultrapassa os monstros.'},
  lure:{name:'Isca sonora',price:40,max:3,description:'Consumível. B coloca uma isca no chão por 6 segundos. Atraia os monstros e saia de perto.'},
+ pit:{name:'Buraco portátil [1]',price:300,max:3},
+ fire:{name:'Poça inflamável [2]',price:300,max:3},
+ rock:{name:'Pedra suspensa [3]',price:300,max:3},
  repair:{name:'Kit de reposição',price:60,max:3,description:'Consumível. T restaura uma armadilha usada próxima. Prepare-a novamente com E.'}
 };
 export function normalizeProfile(value){
- const result={coins:0,stamina:0,walk:0,lure:0,repair:0};
+ const result={coins:0,stamina:0,walk:0,lure:0,repair:0,pit:0,fire:0,rock:0};
  if(!value||typeof value!=='object')return result;
  for(const key of Object.keys(result)){const n=value[key];if(Number.isSafeInteger(n)&&n>=0)result[key]=Math.min(n,key==='coins'?1000000000:SHOP[key].max);}
  return result;
@@ -85,8 +102,15 @@ export function buyItem(profile,item){
 }
 export function playerStats(profile){return {stamina:100+profile.stamina*20,walk:SPEED.walk+profile.walk*13};}
 export function spendConsumable(profile,item){
- if(!['lure','repair'].includes(item)||profile[item]<1)return null;
+ if(!['lure','repair','pit','fire','rock'].includes(item)||profile[item]<1)return null;
  return {...profile,[item]:profile[item]-1};
+}
+export function placeTrap(profile,type,player,walls,traps,enemies=[],clues=[]){
+ if(!['pit','fire','rock'].includes(type))return null;
+ const p={x:player.x+Math.cos(player.angle)*85,y:player.y+Math.sin(player.angle)*85};
+ if(blocked(p.x,p.y,65,walls)||traps.some(t=>distance(t,p)<100)||enemies.some(e=>e.alive&&distance(e,p)<45)||clues.some(c=>!c.collected&&distance(c,p)<50))return null;
+ const spent=spendConsumable(profile,type);if(!spent)return null;
+ traps.push({...p,type,r:27,armed:false,used:false,progress:0,flash:0});return spent;
 }
 export function restoreTrap(profile,traps,player){
  const trap=traps.filter(t=>t.used&&distance(t,player)<65).sort((a,b)=>distance(a,player)-distance(b,player))[0];
@@ -100,7 +124,7 @@ if(typeof document!=='undefined') startGame();
 function startGame(){
  const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
  const ui=id=>document.getElementById(id),keys=new Set();
- let state='intro',player,enemies,traps,walls,biome,particles=[],noise=0,kills=0,clock=0,last=0,nearest=null,spaceLatch=false,triggerLatch=false,lastBiome=-1,feedback='',feedbackTime=0,currentSprint=false,clues=[],lures=[],lureLatch=false,repairLatch=false;
+ let state='intro',player,enemies,traps,walls,biome,particles=[],noise=0,kills=0,clock=0,last=0,nearest=null,spaceLatch=false,triggerLatch=false,lastBiome=-1,feedback='',feedbackTime=0,currentSprint=false,clues=[],lures=[],lureLatch=false,repairLatch=false,placementLatch=false;
  const storageKey='hunt-profile-v1';
  let profile=normalizeProfile(null),persistent=true;
  try{profile=normalizeProfile(JSON.parse(localStorage.getItem(storageKey)));}catch{persistent=false;}
@@ -110,22 +134,29 @@ function startGame(){
   const signature=JSON.stringify([state,profile,persistent]);if(signature===shopSignature)return;shopSignature=signature;
   ui('wallet').textContent=`${profile.coins} moedas`;
   ui('shop').hidden=!['intro','won','lost','between'].includes(state);
-  ui('field-inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair}`;
-  ui('inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair}`;
+  ui('field-inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair} / 1 BURACO ${profile.pit} · 2 FOGO ${profile.fire} · 3 PEDRA ${profile.rock}`;
+  ui('inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair} / 1 BURACO ${profile.pit} · 2 FOGO ${profile.fire} · 3 PEDRA ${profile.rock}`;
   ui('shop-status').textContent=`Saldo: ${profile.coins} moedas. `+(state==='playing'||state==='paused'?'Compras disponíveis entre rodadas.':'Cada monstro eliminado rende 50 moedas, mesmo se você perder a rodada.')+(persistent?' Progresso salvo neste navegador.':' Armazenamento indisponível: progresso apenas nesta sessão.');
   for(const [item,spec] of Object.entries(SHOP)){const button=ui('buy-'+item);button.textContent=`${spec.name} · ${spec.price} moedas (${profile[item]}/${spec.max})`;button.disabled=state==='playing'||state==='paused'||profile.coins<spec.price||profile[item]>=spec.max;}
  }
  for(const item of Object.keys(SHOP)){ui('buy-'+item).onclick=()=>{if(state==='playing'||state==='paused')return;const purchase=buyItem(profile,item);if(purchase){profile=purchase;saveProfile();shopView();}};}
 
+ function resetProgress(){
+  const previous=state;if(state==='playing')state='paused';keys.clear();
+  if(!window.confirm('Apagar todas as moedas, melhorias e itens salvos e reiniciar do zero?')){state=previous;return;}
+  profile=normalizeProfile(null);
+  try{localStorage.removeItem(storageKey);}catch{persistent=false;window.alert('O progresso desta sessão foi zerado, mas o navegador não permitiu apagar os dados salvos.');}
+  state='intro';lastBiome=-1;map();shopSignature='';shopView();
+  overlay('Uma nova caçada.','Progresso zerado. Explore o mapa e prepare seu plano.','Entrar na caçada →','RECOMEÇAR DO ZERO');
+ }
+ ui('reset').onclick=resetProgress;ui('reset-field').onclick=resetProgress;
  function map(){
   let index=Math.floor(Math.random()*6);if(index===lastBiome)index=(index+1)%6;lastBiome=index;biome=BIOMES[index];
-  player={x:500,y:535,r:11,stamina:playerStats(profile).stamina,angle:-Math.PI/2,exhausted:false};
-  enemies=[{x:150,y:100},{x:500,y:80},{x:850,y:100}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2,kind:ENEMY_TYPES[(i+index)%3],reaction:0}));
-  walls=[{x:290,y:160,w:65,h:100},{x:640,y:160,w:65,h:100},{x:120,y:400,w:95,h:45},{x:785,y:400,w:95,h:45}];
-  // Small offsets vary the routes while retaining clear paths through every trap.
-  walls.forEach(w=>{w.x+=Math.random()*24-12;w.y+=Math.random()*20-10;});
+  player={x:1250,y:1350,r:11,stamina:playerStats(profile).stamina,angle:-Math.PI/2,exhausted:false};
+  enemies=[{x:375,y:250},{x:1250,y:200},{x:2125,y:250}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2,kind:ENEMY_TYPES[(i+index)%3],reaction:0}));
+  walls=generateWalls([player,...enemies]);
   traps=generateTraps(walls,player,enemies);
-  clues=generateClues(walls,traps);lures=[];lureLatch=false;repairLatch=false;
+  clues=generateClues(walls,traps);lures=[];lureLatch=false;repairLatch=false;placementLatch=false;nearest=null;
   ui('clue-count').textContent='0 / 3';ui('clue-list').replaceChildren();
   ui('clue-empty').hidden=false;
   particles=[];noise=0;kills=0;clock=0;feedbackTime=0;currentSprint=false;keys.clear();spaceLatch=false;triggerLatch=false;
@@ -156,6 +187,8 @@ function startGame(){
   currentSprint=sprint;
   if(sprint){player.stamina=Math.max(0,player.stamina-30*dt);if(player.stamina===0)player.exhausted=true;}else{player.stamina=Math.min(playerStats(profile).stamina,player.stamina+19*dt);if(player.stamina>25)player.exhausted=false;}
   if(moving&&!preparing){let n=Math.hypot(dx,dy);player.angle=Math.atan2(dy,dx);move(player,dx/n*(sprint?SPEED.run:playerStats(profile).walk)*dt,dy/n*(sprint?SPEED.run:playerStats(profile).walk)*dt,11);}
+  const placementKey=['Digit1','Digit2','Digit3'].find(k=>keys.has(k));
+  if(placementKey&&!placementLatch){const type={Digit1:'pit',Digit2:'fire',Digit3:'rock'}[placementKey];const spent=placeTrap(profile,type,player,walls,traps,enemies,clues);if(spent){profile=spent;saveProfile();feedback='Armadilha colocada à frente. Aproxime-se e prepare com E.';}else feedback='Sem armadilha no inventário ou sem espaço livre à frente.';feedbackTime=4;}placementLatch=Boolean(placementKey);
   if(keys.has('KeyB')&&!lureLatch){const spent=spendConsumable(profile,'lure');if(spent){profile=spent;saveProfile();lures.push({x:player.x,y:player.y,life:6});feedback='Isca colocada. Afaste-se para que os monstros sigam o som.';feedbackTime=4;}else{feedback='Sem iscas. Compre entre rodadas.';feedbackTime=2;}}lureLatch=keys.has('KeyB');
   if(keys.has('KeyT')&&!repairLatch){const spent=restoreTrap(profile,traps,player);if(spent){profile=spent;saveProfile();feedback='Armadilha restaurada. Prepare novamente com E.';feedbackTime=4;}else{feedback='Precisa de um kit e de uma armadilha usada próxima.';feedbackTime=2;}}repairLatch=keys.has('KeyT');
   if(keys.has('Space')&&!spaceLatch){noise=1.5;enemies.filter(e=>e.alive&&distance(e,player)<230).forEach(e=>e.alert=5);}spaceLatch=keys.has('Space');
@@ -187,10 +220,10 @@ function startGame(){
  }
  function text(s,x,y,color='#c6d2bc',size=10){ctx.font=`${size}px monospace`;ctx.fillStyle=color;ctx.textAlign='center';ctx.fillText(s,x,y);}
  function draw(){
-  ctx.fillStyle=biome.bg;ctx.fillRect(0,0,1000,620);ctx.strokeStyle=biome.grid;ctx.lineWidth=.6;
-  for(let x=20;x<1000;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,620);ctx.stroke();}for(let y=20;y<620;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1000,y);ctx.stroke();}
+  const camera=cameraFor(player);ctx.fillStyle=biome.bg;ctx.fillRect(0,0,1000,620);ctx.save();ctx.translate(-camera.x,-camera.y);ctx.strokeStyle=biome.grid;ctx.lineWidth=.6;
+  for(let x=20;x<WORLD.width;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,WORLD.height);ctx.stroke();}for(let y=20;y<WORLD.height;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(WORLD.width,y);ctx.stroke();}
   // Deterministic decorative flecks do not affect collisions.
-  for(let i=0;i<85;i++){let x=(i*137+53)%980+10,y=(i*79+21)%600+10;ctx.fillStyle=biome.wall;ctx.globalAlpha=.35;ctx.fillRect(x,y,2,2);}ctx.globalAlpha=1;
+  for(let i=0;i<500;i++){let x=(i*137+53)%(WORLD.width-20)+10,y=(i*79+21)%(WORLD.height-20)+10;ctx.fillStyle=biome.wall;ctx.globalAlpha=.35;ctx.fillRect(x,y,2,2);}ctx.globalAlpha=1;
   walls.forEach(w=>{ctx.fillStyle='#0003';ctx.fillRect(w.x+5,w.y+6,w.w,w.h);ctx.fillStyle=biome.wall;ctx.fillRect(w.x,w.y,w.w,w.h);ctx.strokeStyle=biome.accent+'44';ctx.strokeRect(w.x+.5,w.y+.5,w.w-1,w.h-1);for(let i=8;i<w.w;i+=14){ctx.strokeStyle='#ffffff0d';ctx.beginPath();ctx.moveTo(w.x+i,w.y+5);ctx.lineTo(w.x+i,w.y+w.h-5);ctx.stroke();}});
   clues.forEach(c=>{if(c.collected)return;ctx.save();ctx.translate(c.x,c.y);ctx.shadowColor='#e6d69a';ctx.shadowBlur=8+Math.sin(clock*3)*3;ctx.fillStyle='#e6d69a';ctx.fillRect(-8,-10,16,20);ctx.shadowBlur=0;text('?',0,5,'#303225',14);ctx.restore();text('ANOTAÇÃO',c.x,c.y+25,'#d7cf9d',8);});
   traps.forEach(t=>{
@@ -209,6 +242,14 @@ function startGame(){
   if(noise>0){ctx.strokeStyle=`rgba(211,236,155,${noise/2})`;ctx.beginPath();ctx.arc(player.x,player.y,30+(1.5-noise)*190,0,Math.PI*2);ctx.stroke();}
   ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);ctx.shadowColor='#dcf6a0';ctx.shadowBlur=14;ctx.fillStyle='#dcf6a0';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,-10);ctx.lineTo(-6,0);ctx.lineTo(-10,10);ctx.closePath();ctx.fill();ctx.restore();
   particles.forEach(p=>{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,4,4);});ctx.globalAlpha=1;
+  ctx.restore();
+  // Overview keeps the expanded terrain navigable without shrinking the action.
+  ctx.save();ctx.translate(800,12);ctx.fillStyle='#0b130be8';ctx.fillRect(0,0,188,122);const sx=180/WORLD.width,sy=108/WORLD.height;
+  ctx.translate(4,4);ctx.fillStyle=biome.wall;walls.forEach(w=>ctx.fillRect(w.x*sx,w.y*sy,w.w*sx,w.h*sy));
+  traps.filter(t=>!t.used).forEach(t=>{ctx.fillStyle=t.armed?'#efab74':'#8caa72';ctx.fillRect(t.x*sx-1,t.y*sy-1,3,3);});
+  clues.filter(c=>!c.collected).forEach(c=>{ctx.fillStyle='#e6d69a';ctx.fillRect(c.x*sx-1,c.y*sy-1,3,3);});
+  enemies.filter(e=>e.alive).forEach(e=>{ctx.fillStyle='#e89171';ctx.fillRect(e.x*sx-2,e.y*sy-2,4,4);});
+  ctx.strokeStyle='#d2ed9188';ctx.strokeRect(camera.x*sx,camera.y*sy,1000*sx,620*sy);ctx.fillStyle='#dcf6a0';ctx.beginPath();ctx.arc(player.x*sx,player.y*sy,3,0,Math.PI*2);ctx.fill();text('MAPA · 2500 × 1500',90,116,'#b6c6a5',8);ctx.restore();
   ui('kills').textContent=`${kills} / 3 ELIMINADOS`;ui('stamina').max=playerStats(profile).stamina;ui('stamina').value=player.stamina;shopView();
   const chasing=enemies.some(e=>e.alive&&e.alert>0);ui('status').textContent=state==='paused'?'PAUSADO':chasing?'! EM PERSEGUIÇÃO':'PREPARE O TERRENO';ui('status').style.color=chasing?'#efa47f':'#a1ae97';
   ui('hint').textContent=feedbackTime>0?feedback:nearest?(nearest.armed?(nearest.type==='rock'?'E · Soltar pedra agora. Só acerte quando o monstro estiver no círculo.':'Armadilha pronta. Atraia um monstro até o círculo.'):(distance(player,nearest)<nearest.r+player.r+2?'Afaste-se do círculo para preparar · ':'Segure E · ')+(nearest.type==='pit'?'Descobrir buraco':nearest.type==='fire'?'Acender poça':'Preparar pedra')):'Espaço · Fazer barulho e atrair monstros próximos. Contorne armadilhas ativas. Recolha anotações (?) para descobrir vulnerabilidades.';

@@ -55,3 +55,11 @@ Moedas, melhorias e inventário ficam salvos no `localStorage` deste navegador e
 Iscas emitem som em um raio de 900 unidades, inclusive através de obstáculos. Monstros que detectam o jogador priorizam persegui-lo; fora desse contato, dirigem-se ao emissor enquanto ele estiver ativo. Não existe investigação de última posição conhecida.
 
 A loja aparece somente na tela de transição (incluindo início, vitória, derrota ou abandono da rodada), junto ao botão do próximo mapa. Pausar não abre compras. O caderno permanece à direita do cenário. A cada rodada são sorteadas seis armadilhas, duas de cada tipo, com espaço livre para prepará-las e sem sobreposição com obstáculos, outras armadilhas ou os pontos de spawn.
+
+## Território expandido e armadilhas portáteis
+
+O mundo mede **2.500 × 1.500 unidades**, aproximadamente seis vezes a área original (1.000 × 620). A câmera acompanha o jogador sem alterar o tamanho dos personagens. O minimapa mostra a região visível, obstáculos, monstros, notas e armadilhas. Cada rodada sorteia até 28 obstáculos separados por corredores livres, preservando os pontos de spawn. Notas e armadilhas naturais também são distribuídas pelo território expandido.
+
+A loja vende **buraco portátil, poça inflamável e pedra suspensa por 300 moedas cada**, com até três unidades de cada tipo no inventário. Durante a caçada, **1 / 2 / 3** coloca a respectiva armadilha 85 unidades à frente da direção em que o jogador está olhando. É necessário espaço livre, longe de outras armadilhas, notas e monstros. Uma tentativa inválida não gasta o item. A armadilha colocada começa desarmada: aproxime-se e prepare com **E**, respeitando os mesmos riscos das armadilhas naturais. Itens não utilizados continuam no inventário entre rodadas; armadilhas já colocadas pertencem à rodada atual.
+
+**Zerar progresso** (cabeçalho) ou **Apagar progresso e reiniciar** (tela de transição) pede confirmação antes de remover moedas, melhorias e todo o inventário salvo deste jogo no navegador. Confirmar encerra a rodada e retorna ao início com um novo mapa; cancelar mantém a partida e o progresso. Outros dados do navegador não são apagados. Saves antigos continuam compatíveis e recebem inventário portátil vazio.
