@@ -109,10 +109,10 @@ test('purchases debit coins, respect limits and reject insufficient funds and un
  assert.equal(buyItem(base,'unknown'),null);
  for(const key of Object.keys(SHOP))assert.equal(buyItem({...base,[key]:3},key),null);
 });
-test('upgrade caps preserve sprint requirement, increase maximum stamina and normalize invalid saves',()=>{
+test('maximum walking upgrade outruns monsters, lower levels do not, and invalid saves normalize',()=>{
  const p=normalizeProfile({coins:-1,walk:99,stamina:99,lure:'3',repair:Infinity});
  assert.deepEqual(p,{coins:0,walk:3,stamina:3,lure:0,repair:0});
- assert.equal(playerStats(p).stamina,160);assert.ok(playerStats(p).walk<SPEED.monster);
+ assert.equal(playerStats(p).stamina,160);assert.equal(playerStats(p).walk,179);assert.ok(playerStats(p).walk>SPEED.monster);assert.ok(playerStats({...p,walk:2}).walk<SPEED.monster);
  assert.deepEqual(normalizeProfile(null),{coins:0,stamina:0,walk:0,lure:0,repair:0});
 });
 test('each kill rewards fifty coins and consumables spend once without altering upgrades',()=>{
@@ -123,8 +123,8 @@ test('each kill rewards fifty coins and consumables spend once without altering 
 });
 test('active sound lure attracts only nearby enemies and ceases on expiration',()=>{
  const e={x:0,y:0},lure={x:100,y:0,life:6};
- assert.equal(audibleLure(e,[lure]),lure);
- assert.equal(audibleLure({x:400,y:0},[lure]),undefined);
+ assert.equal(audibleLure(e,[lure]),lure);assert.equal(audibleLure({x:950,y:0},[lure]),lure);
+ assert.equal(audibleLure({x:1001,y:0},[lure]),undefined);
  assert.equal(audibleLure(e,[{...lure,life:0}]),undefined);
 });
 test('repair restores a used nearby trap unarmed, spends one kit, and failed use spends nothing',()=>{
@@ -134,4 +134,19 @@ test('repair restores a used nearby trap unarmed, spends one kit, and failed use
  assert.equal(trap.used,false);assert.equal(trap.armed,false);assert.equal(trap.progress,0);
  assert.equal(restoreTrap(result,[trap],{x:150,y:100}),null);
  trap.used=true;assert.equal(restoreTrap({...p,repair:0},[trap],{x:150,y:100}),null);assert.equal(trap.used,true);
+});
+
+import {generateTraps} from './game.js';
+test('random traps keep two of each type and clear approach space across rounds',()=>{
+ let seed=57;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+ const walls=[{x:290,y:160,w:65,h:100},{x:640,y:160,w:65,h:100},{x:120,y:400,w:95,h:45},{x:785,y:400,w:95,h:45}];
+ const player={x:500,y:535},enemies=[{x:150,y:100},{x:500,y:80},{x:850,y:100}];
+ const layouts=new Set();
+ for(let i=0;i<300;i++){
+  const traps=generateTraps(walls,player,enemies,random);assert.equal(traps.length,6);layouts.add(JSON.stringify(traps));
+  for(const type of ['pit','fire','rock'])assert.equal(traps.filter(t=>t.type===type).length,2);
+  for(const t of traps){assert.equal(blocked(t.x,t.y,65,walls),false);assert.ok(distance(t,player)>100);assert.ok(enemies.every(e=>distance(t,e)>85));assert.ok(traps.every(other=>other===t||distance(t,other)>125));}
+ }
+ assert.equal(layouts.size,300);
+ assert.equal(generateTraps(walls,player,enemies,()=>.5).length,6);
 });

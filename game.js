@@ -11,6 +11,19 @@ export function trapHits(trap, enemy){return trap.armed&&!trap.used&&distance(tr
 export function blocked(x,y,r,walls){return x<r||y<r||x>1000-r||y>620-r||walls.some(w=>x+r>w.x&&x-r<w.x+w.w&&y+r>w.y&&y-r<w.y+w.h);}
 export function lineClear(a,b,walls){const n=Math.ceil(distance(a,b)/8);for(let i=1;i<n;i++){const x=a.x+(b.x-a.x)*i/n,y=a.y+(b.y-a.y)*i/n;if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h))return false;}return true;}
 export const SPEED = {walk:140, run:240, monster:175};
+export const LURE_RANGE=900;
+export function generateTraps(walls,player,enemies,random=Math.random){
+ const traps=[];
+ const valid=p=>!blocked(p.x,p.y,65,walls)&&distance(p,player)>100&&enemies.every(e=>distance(p,e)>85)&&traps.every(t=>distance(p,t)>125);
+ for(const type of ['pit','fire','rock','pit','fire','rock']){
+  let spot;
+  for(let attempt=0;attempt<500;attempt++){const p={x:70+random()*860,y:70+random()*480};if(valid(p)){spot=p;break;}}
+  if(!spot)for(let y=70;y<=550&&!spot;y+=25)for(let x=70;x<=930;x+=25){const p={x,y};if(valid(p)){spot=p;break;}}
+  if(!spot)throw new Error('No safe space for traps');
+  traps.push({...spot,type,r:27,armed:false,used:false,progress:0,flash:0});
+ }
+ return traps;
+}
 export const ENEMY_TYPES = ['stria','dot','cross'];
 const weaknesses = {stria:'pit', dot:'rock', cross:'fire'};
 export function vulnerable(enemy,trap){return weaknesses[enemy.kind]===trap.type;}
@@ -56,7 +69,7 @@ export function collectClues(clues,player){
 }
 export const SHOP = {
  stamina:{name:'Reserva de fôlego',price:75,max:3,description:'+20 de fôlego máximo por nível. Permanente.'},
- walk:{name:'Passos leves',price:100,max:3,description:'+8 de velocidade de caminhada por nível. Permanente; ainda abaixo dos monstros.'},
+ walk:{name:'Passos leves',price:100,max:3,description:'+13 de velocidade de caminhada por nível. No máximo, ultrapassa os monstros.'},
  lure:{name:'Isca sonora',price:40,max:3,description:'Consumível. B coloca uma isca no chão por 6 segundos. Atraia os monstros e saia de perto.'},
  repair:{name:'Kit de reposição',price:60,max:3,description:'Consumível. T restaura uma armadilha usada próxima. Prepare-a novamente com E.'}
 };
@@ -70,7 +83,7 @@ export function buyItem(profile,item){
  const spec=SHOP[item];if(!spec||profile.coins<spec.price||profile[item]>=spec.max)return null;
  return {...profile,coins:profile.coins-spec.price,[item]:profile[item]+1};
 }
-export function playerStats(profile){return {stamina:100+profile.stamina*20,walk:SPEED.walk+profile.walk*8};}
+export function playerStats(profile){return {stamina:100+profile.stamina*20,walk:SPEED.walk+profile.walk*13};}
 export function spendConsumable(profile,item){
  if(!['lure','repair'].includes(item)||profile[item]<1)return null;
  return {...profile,[item]:profile[item]-1};
@@ -82,7 +95,7 @@ export function restoreTrap(profile,traps,player){
  return spent;
 }
 export function rewardKill(profile){return {...profile,coins:Math.min(1000000000,profile.coins+50)};}
-export function audibleLure(enemy,lures){return lures.filter(l=>l.life>0&&distance(l,enemy)<230).sort((a,b)=>distance(a,enemy)-distance(b,enemy))[0];}
+export function audibleLure(enemy,lures){return lures.filter(l=>l.life>0&&distance(l,enemy)<LURE_RANGE).sort((a,b)=>distance(a,enemy)-distance(b,enemy))[0];}
 if(typeof document!=='undefined') startGame();
 function startGame(){
  const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
@@ -96,8 +109,10 @@ function startGame(){
  function shopView(){
   const signature=JSON.stringify([state,profile,persistent]);if(signature===shopSignature)return;shopSignature=signature;
   ui('wallet').textContent=`${profile.coins} moedas`;
+  ui('shop').hidden=!['intro','won','lost','between'].includes(state);
+  ui('field-inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair}`;
   ui('inventory').textContent=`B · ISCAS ${profile.lure} / T · KITS ${profile.repair}`;
-  ui('shop-status').textContent=(state==='playing'||state==='paused'?'Compras disponíveis entre rodadas.':'Cada monstro eliminado rende 50 moedas, mesmo se você perder a rodada.')+(persistent?' Progresso salvo neste navegador.':' Armazenamento indisponível: progresso apenas nesta sessão.');
+  ui('shop-status').textContent=`Saldo: ${profile.coins} moedas. `+(state==='playing'||state==='paused'?'Compras disponíveis entre rodadas.':'Cada monstro eliminado rende 50 moedas, mesmo se você perder a rodada.')+(persistent?' Progresso salvo neste navegador.':' Armazenamento indisponível: progresso apenas nesta sessão.');
   for(const [item,spec] of Object.entries(SHOP)){const button=ui('buy-'+item);button.textContent=`${spec.name} · ${spec.price} moedas (${profile[item]}/${spec.max})`;button.disabled=state==='playing'||state==='paused'||profile.coins<spec.price||profile[item]>=spec.max;}
  }
  for(const item of Object.keys(SHOP)){ui('buy-'+item).onclick=()=>{if(state==='playing'||state==='paused')return;const purchase=buyItem(profile,item);if(purchase){profile=purchase;saveProfile();shopView();}};}
@@ -109,7 +124,7 @@ function startGame(){
   walls=[{x:290,y:160,w:65,h:100},{x:640,y:160,w:65,h:100},{x:120,y:400,w:95,h:45},{x:785,y:400,w:95,h:45}];
   // Small offsets vary the routes while retaining clear paths through every trap.
   walls.forEach(w=>{w.x+=Math.random()*24-12;w.y+=Math.random()*20-10;});
-  traps=[{x:190,y:290,type:'pit'},{x:500,y:245,type:'fire'},{x:810,y:290,type:'rock'},{x:345,y:435,type:'fire'},{x:655,y:435,type:'pit'},{x:500,y:365,type:'rock'}].map(t=>({...t,r:27,armed:false,used:false,progress:0,flash:0}));
+  traps=generateTraps(walls,player,enemies);
   clues=generateClues(walls,traps);lures=[];lureLatch=false;repairLatch=false;
   ui('clue-count').textContent='0 / 3';ui('clue-list').replaceChildren();
   ui('clue-empty').hidden=false;
@@ -117,15 +132,16 @@ function startGame(){
   ui('biome').textContent=biome.name;ui('dot').style.background=biome.accent;
  }
  function overlay(title,description,label,eyebrow){ui('title').textContent=title;ui('description').innerHTML=description;ui('play').textContent=label;ui('overline').textContent=eyebrow;ui('overlay').classList.remove('hidden');}
- function begin(){map();state='playing';ui('overlay').classList.add('hidden');canvas.focus();}
- ui('play').onclick=()=>{if(state==='paused'){state='playing';ui('overlay').classList.add('hidden');canvas.focus();}else begin();};
- ui('new').onclick=begin;
+ function begin(){map();state='playing';ui('overlay').classList.add('hidden');shopView();canvas.focus({preventScroll:true});}
+ ui('play').onclick=()=>{if(state==='paused'){state='playing';ui('overlay').classList.add('hidden');canvas.focus({preventScroll:true});}else begin();};
+ function between(){if(state==='intro'||state==='won'||state==='lost'||state==='between')return;state='between';keys.clear();overlay('Prepare a próxima caçada.','Abasteça seus suprimentos antes de entrar em outro mapa.','Ir para o próximo mapa →','ENTRE RODADAS');shopView();}
+ ui('new').onclick=between;
  function pause(){if(state==='playing'){state='paused';keys.clear();overlay('Respire. Refaça o plano.','A caçada está pausada.','Continuar →','PAUSA');}else if(state==='paused'){state='playing';ui('overlay').classList.add('hidden');}}
- window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.code==='KeyP'&&!e.repeat)pause();if(e.code==='KeyR'&&!e.repeat)begin();keys.add(e.code);});
+ window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.code==='KeyP'&&!e.repeat)pause();if(e.code==='KeyR'&&!e.repeat)between();keys.add(e.code);});
  window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(state==='playing')pause();});
  function move(entity,dx,dy,r){if(!blocked(entity.x+dx,entity.y,r,walls))entity.x+=dx;if(!blocked(entity.x,entity.y+dy,r,walls))entity.y+=dy;}
  function kill(enemy,trap){if(!enemy.alive)return;enemy.alive=false;kills++;profile=rewardKill(profile);saveProfile();for(let i=0;i<18;i++)particles.push({x:enemy.x,y:enemy.y,vx:(Math.random()-.5)*150,vy:(Math.random()-.5)*150,life:.8,color:'#e89171'});}
- function lose(message){if(state!=='playing')return;state='lost';overlay('O plano veio tarde.',message,'Tentar outro mapa →','A CAÇADA TERMINOU');}
+ function lose(message){if(state!=='playing')return;state='lost';overlay('O plano veio tarde.',message,'Ir para o próximo mapa →','A CAÇADA TERMINOU');}
  function activate(trap){
   const caught=playerInDanger(trap,player,true);
   const results=resolveTrap(trap,enemies);
@@ -157,16 +173,16 @@ function startGame(){
    let vx=target.x-enemy.x,vy=target.y-enemy.y,n=Math.hypot(vx,vy);enemy.angle=Math.atan2(vy,vx);
    if(n>3)move(enemy,vx/n*(enemy.alert>0||lure?SPEED.monster:33)*dt,vy/n*(enemy.alert>0||lure?SPEED.monster:33)*dt,13);
    for(const trap of traps){if(trap.type!=='rock'&&trapHits(trap,enemy)){activate(trap);break;}}
-   if(enemy.alive&&distance(enemy,player)<23){lose('Você foi alcançado. Monstros correm mais que sua caminhada.<br>Reserve fôlego para fugir e contorne suas armadilhas.');break;}
+   if(enemy.alive&&distance(enemy,player)<23){lose('Você foi alcançado. Melhore sua caminhada ou reserve fôlego para fugir<br>Planeje a rota e contorne suas armadilhas.');break;}
   }
   if(state==='playing'){
    for(const message of collectClues(clues,player)){
     const li=document.createElement('li');li.textContent=message;ui('clue-list').append(li);
     ui('clue-empty').hidden=true;ui('clue-count').textContent=`${clues.filter(c=>c.collected).length} / 3`;
-    feedback='Anotação recolhida. Vulnerabilidade registrada no caderno abaixo do mapa.';feedbackTime=5;
+    feedback='Anotação recolhida. Vulnerabilidade registrada no caderno à direita.';feedbackTime=5;
    }
   }
-  if(kills===3&&state==='playing'){state='won';overlay('Você virou o jogo.','Três predadores. Nenhuma arma.<br>O terreno fez o trabalho — o plano foi seu.','Caçar em outro bioma →','ÁREA SEGURA / 3 DE 3');}
+  if(kills===3&&state==='playing'){state='won';overlay('Você virou o jogo.','Três predadores. Nenhuma arma.<br>O terreno fez o trabalho — o plano foi seu.','Ir para o próximo mapa →','ÁREA SEGURA / 3 DE 3');}
   particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;});particles=particles.filter(p=>p.life>0);
  }
  function text(s,x,y,color='#c6d2bc',size=10){ctx.font=`${size}px monospace`;ctx.fillStyle=color;ctx.textAlign='center';ctx.fillText(s,x,y);}
