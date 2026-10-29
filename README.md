@@ -17,7 +17,7 @@ Abra `http://localhost:3000` no seu computador. No ambiente em nuvem, use o enca
 - Pedra: depois de preparar, solte E e pressione novamente quando o monstro estiver no círculo. É possível desperdiçar a pedra.
 - P: pausar; R ou “Novo mapa”: abrir a transição com a loja; confirme para ir ao próximo mapa.
 
-Elimine os três monstros sem encostar neles. Armadilhas ativas também matam o jogador: buraco e fogo ao contato, pedra no momento da queda. Prepare de fora do círculo (entre 40 e 65 unidades de distância); você não pode preparar de dentro da área perigosa. Armadilhas acionadas são consumidas, mesmo quando o alvo resiste. Há três tipos de criatura, identificáveis por marcas neutras; descubra suas vulnerabilidades por tentativa e erro. Cada mapa contém um de cada tipo e duas armadilhas de cada categoria; desperdiçar recursos pode tornar a partida impossível, exigindo um novo mapa.
+Elimine os seis monstros sem encostar neles. Armadilhas ativas também matam o jogador: buraco e fogo ao contato, pedra no momento da queda. Prepare de fora do círculo (entre 40 e 65 unidades de distância); você não pode preparar de dentro da área perigosa. Armadilhas acionadas são consumidas, mesmo quando o alvo resiste. Há três tipos de criatura, identificáveis pelas cores azul, violeta e ocre; descubra suas vulnerabilidades por tentativa e erro. Cada mapa contém dois de cada tipo e quatro armadilhas de cada categoria; desperdiçar recursos pode tornar a partida impossível, exigindo um novo mapa.
 
 Audição é circular, com metade do alcance antigo (107,5 unidades andando e 137,5 correndo), e detecta movimento mesmo atrás de obstáculos. Visão usa um cone de 60 graus com o alcance antigo (215 unidades andando e 275 correndo), bloqueado pelos obstáculos. Espaço emite um chamado de 230 unidades. O desenho do cone mostra a área visível; a circunferência tracejada mostra o alcance auditivo. Após detectar, monstros perseguem por alguns segundos mesmo sem contato. Velocidades em unidades/segundo: caminhada 140, perseguição 175, corrida 240. Sem melhorias, só a corrida permite abrir distância; a caminhada no nível máximo chega a 179 e supera os monstros.
 
@@ -37,7 +37,7 @@ O workflow `.github/workflows/pages.yml` publica o jogo estático em pushes para
 
 ## Anotações de campo
 
-Cada rodada sorteia três anotações (?), uma para cada marca de criatura. Elas podem aparecer por todo o mapa, inclusive no território dos monstros, mas nunca dentro de obstáculos ou sobre armadilhas. Passe perto para recolher automaticamente: a informação fica no caderno à direita do mapa até o fim da rodada. Recolher não pausa o jogo. Um novo mapa limpa o caderno e sorteia novas posições. As vulnerabilidades continuam fixas entre rodadas, permitindo aprender também por tentativa e erro.
+Cada rodada sorteia três anotações (?), uma para cada cor de criatura. Elas podem aparecer por todo o mapa, inclusive no território dos monstros, mas nunca dentro de obstáculos ou sobre armadilhas. Passe perto para recolher automaticamente: a informação fica no caderno à direita do mapa até o fim da rodada. Recolher não pausa o jogo. Um novo mapa limpa o caderno e sorteia novas posições. As vulnerabilidades continuam fixas entre rodadas, permitindo aprender também por tentativa e erro.
 
 ## Recompensas e suprimentos
 
@@ -54,7 +54,7 @@ Moedas, melhorias e inventário ficam salvos no `localStorage` deste navegador e
 
 Iscas emitem som em um raio de 900 unidades, inclusive através de obstáculos. Monstros que detectam o jogador priorizam persegui-lo; fora desse contato, dirigem-se ao emissor enquanto ele estiver ativo. Não existe investigação de última posição conhecida.
 
-A loja aparece somente na tela de transição (incluindo início, vitória, derrota ou abandono da rodada), junto ao botão do próximo mapa. Pausar não abre compras. O caderno permanece à direita do cenário. A cada rodada são sorteadas seis armadilhas, duas de cada tipo, com espaço livre para prepará-las e sem sobreposição com obstáculos, outras armadilhas ou os pontos de spawn.
+A loja aparece somente na tela de transição (incluindo início, vitória, derrota ou abandono da rodada), junto ao botão do próximo mapa. Pausar não abre compras. O caderno permanece à direita do cenário. A cada rodada são sorteadas doze armadilhas, quatro de cada tipo, com espaço livre para prepará-las e sem sobreposição com obstáculos, outras armadilhas ou os pontos de spawn.
 
 ## Território expandido e armadilhas portáteis
 
@@ -63,3 +63,5 @@ O mundo mede **2.500 × 1.500 unidades**, aproximadamente seis vezes a área ori
 A loja vende **buraco portátil, poça inflamável e pedra suspensa por 300 moedas cada**, com até três unidades de cada tipo no inventário. Durante a caçada, **1 / 2 / 3** coloca a respectiva armadilha 85 unidades à frente da direção em que o jogador está olhando. É necessário espaço livre, longe de outras armadilhas, notas e monstros. Uma tentativa inválida não gasta o item. A armadilha colocada começa desarmada: aproxime-se e prepare com **E**, respeitando os mesmos riscos das armadilhas naturais. Itens não utilizados continuam no inventário entre rodadas; armadilhas já colocadas pertencem à rodada atual.
 
 **Zerar progresso** (cabeçalho) ou **Apagar progresso e reiniciar** (tela de transição) pede confirmação antes de remover moedas, melhorias e todo o inventário salvo deste jogo no navegador. Confirmar encerra a rodada e retorna ao início com um novo mapa; cancelar mantém a partida e o progresso. Outros dados do navegador não são apagados. Saves antigos continuam compatíveis e recebem inventário portátil vazio.
+
+As seis criaturas ocupam diferentes regiões do mapa (duas por tipo). As cores de cada tipo permanecem iguais durante a perseguição e no minimapa; o alerta continua sinalizado por `!` e um halo. As pistas descrevem as criaturas pelas cores. A vitória exige eliminar as seis. Cada rodada dispõe de doze armadilhas naturais: quatro buracos, quatro poças de fogo e quatro pedras.

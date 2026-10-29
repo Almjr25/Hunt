@@ -74,10 +74,10 @@ test('vision preserves old reach in forward 60 degree cone and respects walls',(
 test('pursuit outruns walking but is slower than sprinting',()=>{assert.ok(SPEED.walk<SPEED.monster);assert.ok(SPEED.monster<SPEED.run);});
 
 import {generateClues, collectClues, clueText, distance} from './game.js';
-test('clues describe actual weaknesses consistently for each creature mark',()=>{
- assert.match(clueText('stria'),/traço.*buracos/);
- assert.match(clueText('dot'),/círculo.*pedra/);
- assert.match(clueText('cross'),/cruz.*fogo/);
+test('clues describe actual weaknesses consistently for each creature color',()=>{
+ assert.match(clueText('stria'),/azul.*buracos/);
+ assert.match(clueText('dot'),/violeta.*pedra/);
+ assert.match(clueText('cross'),/ocre.*fogo/);
 });
 test('clues spawn throughout the map, including monster territory, outside obstacles and traps',()=>{
  let seed=73;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -137,18 +137,18 @@ test('repair restores a used nearby trap unarmed, spends one kit, and failed use
 });
 
 import {generateTraps} from './game.js';
-test('random traps keep two of each type and clear approach space across rounds',()=>{
+test('random traps keep four of each type and clear approach space across rounds',()=>{
  let seed=57;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
  const walls=[{x:290,y:160,w:65,h:100},{x:640,y:160,w:65,h:100},{x:120,y:400,w:95,h:45},{x:785,y:400,w:95,h:45}];
  const player={x:500,y:535},enemies=[{x:150,y:100},{x:500,y:80},{x:850,y:100}];
  const layouts=new Set();
  for(let i=0;i<300;i++){
-  const traps=generateTraps(walls,player,enemies,random);assert.equal(traps.length,6);layouts.add(JSON.stringify(traps));
-  for(const type of ['pit','fire','rock'])assert.equal(traps.filter(t=>t.type===type).length,2);
+  const traps=generateTraps(walls,player,enemies,random);assert.equal(traps.length,12);layouts.add(JSON.stringify(traps));
+  for(const type of ['pit','fire','rock'])assert.equal(traps.filter(t=>t.type===type).length,4);
   for(const t of traps){assert.equal(blocked(t.x,t.y,65,walls),false);assert.ok(distance(t,player)>100);assert.ok(enemies.every(e=>distance(t,e)>85));assert.ok(traps.every(other=>other===t||distance(t,other)>125));}
  }
  assert.equal(layouts.size,300);
- assert.equal(generateTraps(walls,player,enemies,()=>.5).length,6);
+ assert.equal(generateTraps(walls,player,enemies,()=>.5).length,12);
 });
 
 import {WORLD,cameraFor,generateWalls,placeTrap} from './game.js';
@@ -165,7 +165,7 @@ test('random obstacles keep spawns and passageways free in the expanded terrain'
  for(let i=0;i<100;i++){const walls=generateWalls(spawns,random);assert.equal(walls.length,28);layouts.add(JSON.stringify(walls));
   for(const p of spawns)assert.equal(blocked(p.x,p.y,150,walls),false);
   for(const w of walls){assert.ok(w.x>=0&&w.y>=0&&w.x+w.w<WORLD.width&&w.y+w.h<WORLD.height);for(const o of walls)if(o!==w)assert.ok(w.x>=o.x+o.w+100||w.x+w.w<=o.x-100||w.y>=o.y+o.h+100||w.y+w.h<=o.y-100);}
-  assert.equal(generateTraps(walls,spawns[0],spawns.slice(1),random).length,6);
+  assert.equal(generateTraps(walls,spawns[0],spawns.slice(1),random).length,12);
  }assert.equal(layouts.size,100);
 });
 test('portable traps cost 300, migrate old saves, and spend only on valid placement',()=>{
@@ -177,4 +177,24 @@ test('portable traps cost 300, migrate old saves, and spend only on valid placem
  assert.equal(placeTrap(p,'pit',{x:20,y:20,angle:Math.PI},[],[]),null);
  assert.equal(placeTrap(p,'pit',player,[],[{x:1080,y:1000}]),null);
  assert.equal(placeTrap(normalizeProfile(null),'pit',player,[],[]),null);
+});
+
+import {createEnemies,ENEMY_COLORS,roundComplete} from './game.js';
+test('six spread enemies include two of each color in every biome',()=>{
+ for(let biome=0;biome<6;biome++){
+  const enemies=createEnemies(biome);assert.equal(enemies.length,6);
+  assert.equal(new Set(enemies.map(e=>`${e.x},${e.y}`)).size,6);
+  for(const kind of ENEMY_TYPES){assert.equal(enemies.filter(e=>e.kind===kind).length,2);assert.ok(clueText(kind).includes(ENEMY_COLORS[kind].name));}
+  assert.equal(new Set(ENEMY_TYPES.map(k=>ENEMY_COLORS[k].fill)).size,3);
+ }
+});
+test('round only completes after all six monsters are eliminated',()=>{
+ const enemies=createEnemies();assert.equal(roundComplete(enemies),false);
+ enemies.slice(0,3).forEach(e=>e.alive=false);assert.equal(roundComplete(enemies),false);
+ enemies.slice(3,5).forEach(e=>e.alive=false);assert.equal(roundComplete(enemies),false);
+ enemies[5].alive=false;assert.equal(roundComplete(enemies),true);assert.equal(roundComplete([]),false);
+});
+test('larger encounters leave space for random obstacles and twelve traps',()=>{
+ let seed=138;const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
+ for(let i=0;i<100;i++){const player={x:1250,y:1350},enemies=createEnemies(i%6),walls=generateWalls([player,...enemies],random),traps=generateTraps(walls,player,enemies,random);assert.equal(walls.length,28);assert.equal(traps.length,12);for(const t of traps)assert.ok(enemies.every(e=>distance(e,t)>85));}
 });

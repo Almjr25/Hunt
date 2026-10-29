@@ -29,7 +29,7 @@ export const LURE_RANGE=900;
 export function generateTraps(walls,player,enemies,random=Math.random){
  const traps=[];
  const valid=p=>!blocked(p.x,p.y,65,walls)&&distance(p,player)>100&&enemies.every(e=>distance(p,e)>85)&&traps.every(t=>distance(p,t)>125);
- for(const type of ['pit','fire','rock','pit','fire','rock']){
+ for(const type of Array.from({length:12},(_,i)=>['pit','fire','rock'][i%3])){
   let spot;
   for(let attempt=0;attempt<500;attempt++){const p={x:70+random()*(WORLD.width-140),y:70+random()*(WORLD.height-140)};if(valid(p)){spot=p;break;}}
   if(!spot)for(let y=70;y<=WORLD.height-70&&!spot;y+=25)for(let x=70;x<=WORLD.width-70;x+=25){const p={x,y};if(valid(p)){spot=p;break;}}
@@ -39,6 +39,9 @@ export function generateTraps(walls,player,enemies,random=Math.random){
  return traps;
 }
 export const ENEMY_TYPES = ['stria','dot','cross'];
+export const ENEMY_COLORS={stria:{name:'azul',fill:'#78b9f5'},dot:{name:'violeta',fill:'#bd8cf0'},cross:{name:'ocre',fill:'#f1ba67'}};
+export function createEnemies(biomeIndex=0){return [{x:375,y:250},{x:1250,y:200},{x:2125,y:250},{x:425,y:800},{x:1250,y:700},{x:2075,y:800}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2,kind:ENEMY_TYPES[(i+biomeIndex)%3],reaction:0}));}
+export function roundComplete(enemies){return enemies.length>0&&enemies.every(e=>!e.alive);}
 const weaknesses = {stria:'pit', dot:'rock', cross:'fire'};
 export function vulnerable(enemy,trap){return weaknesses[enemy.kind]===trap.type;}
 export function perception(enemy,player,walls,sprinting=false,moving=true){
@@ -58,9 +61,9 @@ export function playerInDanger(trap,player,dropping=false){
  return trap.armed&&!trap.used&&(trap.type!=='rock'||dropping)&&distance(trap,player)<trap.r+player.r;
 }
 const clueDescriptions = {
- stria:'Marca de traço (|): a criatura resiste a fogo e impacto, mas cai em buracos.',
- dot:'Marca de círculo (○): só uma pedra suspensa consegue esmagar essa criatura.',
- cross:'Marca de cruz (×): a criatura evita a morte por queda ou impacto, mas não resiste ao fogo.'
+ stria:'Criatura azul: ela resiste a fogo e impacto, mas cai em buracos.',
+ dot:'Criatura violeta: só uma pedra suspensa consegue esmagá-la.',
+ cross:'Criatura ocre: ela evita a morte por queda ou impacto, mas não resiste ao fogo.'
 };
 export function clueText(kind){return clueDescriptions[kind];}
 export function generateClues(walls,traps,random=Math.random){
@@ -153,7 +156,7 @@ function startGame(){
  function map(){
   let index=Math.floor(Math.random()*6);if(index===lastBiome)index=(index+1)%6;lastBiome=index;biome=BIOMES[index];
   player={x:1250,y:1350,r:11,stamina:playerStats(profile).stamina,angle:-Math.PI/2,exhausted:false};
-  enemies=[{x:375,y:250},{x:1250,y:200},{x:2125,y:250}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2,kind:ENEMY_TYPES[(i+index)%3],reaction:0}));
+  enemies=createEnemies(index);
   walls=generateWalls([player,...enemies]);
   traps=generateTraps(walls,player,enemies);
   clues=generateClues(walls,traps);lures=[];lureLatch=false;repairLatch=false;placementLatch=false;nearest=null;
@@ -215,7 +218,7 @@ function startGame(){
     feedback='Anotação recolhida. Vulnerabilidade registrada no caderno à direita.';feedbackTime=5;
    }
   }
-  if(kills===3&&state==='playing'){state='won';overlay('Você virou o jogo.','Três predadores. Nenhuma arma.<br>O terreno fez o trabalho — o plano foi seu.','Ir para o próximo mapa →','ÁREA SEGURA / 3 DE 3');}
+  if(roundComplete(enemies)&&state==='playing'){state='won';overlay('Você virou o jogo.',`${enemies.length} predadores. Nenhuma arma.<br>O terreno fez o trabalho — o plano foi seu.`,'Ir para o próximo mapa →',`ÁREA SEGURA / ${enemies.length} DE ${enemies.length}`);}
   particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;});particles=particles.filter(p=>p.life>0);
  }
  function text(s,x,y,color='#c6d2bc',size=10){ctx.font=`${size}px monospace`;ctx.fillStyle=color;ctx.textAlign='center';ctx.fillText(s,x,y);}
@@ -237,7 +240,7 @@ function startGame(){
   enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.angle);ctx.fillStyle='#ed9c7020';ctx.strokeStyle='#ed9c7044';ctx.beginPath();ctx.moveTo(0,0);
    const range=currentSprint?275:215;
    for(let a=-Math.PI/6;a<=Math.PI/6+.001;a+=Math.PI/120){let r=0;while(r<range){const x=e.x+Math.cos(e.angle+a)*(r+5),y=e.y+Math.sin(e.angle+a)*(r+5);if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h))break;r+=5;}ctx.lineTo(Math.cos(a)*Math.min(r,range),Math.sin(a)*Math.min(r,range));}ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([2,7]);ctx.beginPath();ctx.arc(0,0,range/2,0,Math.PI*2);ctx.stroke();ctx.restore();});
-  enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);if(e.alert>0){ctx.strokeStyle='#e9927140';ctx.beginPath();ctx.arc(0,0,23+Math.sin(clock*6)*3,0,Math.PI*2);ctx.stroke();text('!',0,-29,'#f3aa87',16);}if(e.reaction>0)text('RESISTIU',0,-42,'#ffd0a1',9);ctx.rotate(e.angle);ctx.fillStyle=e.alert>0?'#ef916d':'#b97c67';ctx.fillRect(-12,-12,24,24);ctx.strokeStyle='#eed5bd';ctx.lineWidth=2;ctx.beginPath();if(e.kind==='stria'){ctx.moveTo(-7,-7);ctx.lineTo(-7,7);}else if(e.kind==='dot'){ctx.arc(-5,0,3,0,Math.PI*2);}else{ctx.moveTo(-8,-4);ctx.lineTo(-1,4);ctx.moveTo(-8,4);ctx.lineTo(-1,-4);}ctx.stroke();ctx.fillStyle='#37271f';ctx.fillRect(5,-6,4,4);ctx.fillRect(5,3,4,4);ctx.restore();});
+  enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);if(e.alert>0){ctx.strokeStyle='#e9927140';ctx.beginPath();ctx.arc(0,0,23+Math.sin(clock*6)*3,0,Math.PI*2);ctx.stroke();text('!',0,-29,'#f3aa87',16);}if(e.reaction>0)text('RESISTIU',0,-42,'#ffd0a1',9);ctx.rotate(e.angle);ctx.fillStyle=ENEMY_COLORS[e.kind].fill;ctx.fillRect(-12,-12,24,24);ctx.fillStyle='#37271f';ctx.fillRect(5,-6,4,4);ctx.fillRect(5,3,4,4);ctx.restore();});
   lures.forEach(l=>{ctx.strokeStyle='#9adfe3';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(l.x,l.y,10+(clock*35)%45,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#9adfe3';ctx.fillRect(l.x-5,l.y-5,10,10);text(`ISCA ${Math.ceil(l.life)}s`,l.x,l.y+25,'#9adfe3',9);});
   if(noise>0){ctx.strokeStyle=`rgba(211,236,155,${noise/2})`;ctx.beginPath();ctx.arc(player.x,player.y,30+(1.5-noise)*190,0,Math.PI*2);ctx.stroke();}
   ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);ctx.shadowColor='#dcf6a0';ctx.shadowBlur=14;ctx.fillStyle='#dcf6a0';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,-10);ctx.lineTo(-6,0);ctx.lineTo(-10,10);ctx.closePath();ctx.fill();ctx.restore();
@@ -248,9 +251,9 @@ function startGame(){
   ctx.translate(4,4);ctx.fillStyle=biome.wall;walls.forEach(w=>ctx.fillRect(w.x*sx,w.y*sy,w.w*sx,w.h*sy));
   traps.filter(t=>!t.used).forEach(t=>{ctx.fillStyle=t.armed?'#efab74':'#8caa72';ctx.fillRect(t.x*sx-1,t.y*sy-1,3,3);});
   clues.filter(c=>!c.collected).forEach(c=>{ctx.fillStyle='#e6d69a';ctx.fillRect(c.x*sx-1,c.y*sy-1,3,3);});
-  enemies.filter(e=>e.alive).forEach(e=>{ctx.fillStyle='#e89171';ctx.fillRect(e.x*sx-2,e.y*sy-2,4,4);});
+  enemies.filter(e=>e.alive).forEach(e=>{ctx.fillStyle=ENEMY_COLORS[e.kind].fill;ctx.fillRect(e.x*sx-2,e.y*sy-2,4,4);});
   ctx.strokeStyle='#d2ed9188';ctx.strokeRect(camera.x*sx,camera.y*sy,1000*sx,620*sy);ctx.fillStyle='#dcf6a0';ctx.beginPath();ctx.arc(player.x*sx,player.y*sy,3,0,Math.PI*2);ctx.fill();text('MAPA · 2500 × 1500',90,116,'#b6c6a5',8);ctx.restore();
-  ui('kills').textContent=`${kills} / 3 ELIMINADOS`;ui('stamina').max=playerStats(profile).stamina;ui('stamina').value=player.stamina;shopView();
+  ui('kills').textContent=`${kills} / ${enemies.length} ELIMINADOS`;ui('stamina').max=playerStats(profile).stamina;ui('stamina').value=player.stamina;shopView();
   const chasing=enemies.some(e=>e.alive&&e.alert>0);ui('status').textContent=state==='paused'?'PAUSADO':chasing?'! EM PERSEGUIÇÃO':'PREPARE O TERRENO';ui('status').style.color=chasing?'#efa47f':'#a1ae97';
   ui('hint').textContent=feedbackTime>0?feedback:nearest?(nearest.armed?(nearest.type==='rock'?'E · Soltar pedra agora. Só acerte quando o monstro estiver no círculo.':'Armadilha pronta. Atraia um monstro até o círculo.'):(distance(player,nearest)<nearest.r+player.r+2?'Afaste-se do círculo para preparar · ':'Segure E · ')+(nearest.type==='pit'?'Descobrir buraco':nearest.type==='fire'?'Acender poça':'Preparar pedra')):'Espaço · Fazer barulho e atrair monstros próximos. Contorne armadilhas ativas. Recolha anotações (?) para descobrir vulnerabilidades.';
  }
