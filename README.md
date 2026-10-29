@@ -17,7 +17,9 @@ Abra `http://localhost:3000` no seu computador. No ambiente em nuvem, use o enca
 - Pedra: depois de preparar, solte E e pressione novamente quando o monstro estiver no círculo. É possível desperdiçar a pedra.
 - P: pausar; R ou “Novo mapa”: reiniciar em outro bioma.
 
-Elimine os três monstros sem encostar neles. Você atravessa suas próprias armadilhas sem sofrer dano. Os monstros enxergam a curta distância, têm visão bloqueada pelos obstáculos e perseguem por alguns segundos após perder contato visual. Correr aumenta a distância em que você é percebido. Andar é mais rápido que os monstros; planeje suas rotas e reserve o fôlego para emergências.
+Elimine os três monstros sem encostar neles. Armadilhas ativas também matam o jogador: buraco e fogo ao contato, pedra no momento da queda. Prepare de fora do círculo (entre 40 e 65 unidades de distância); você não pode preparar de dentro da área perigosa. Armadilhas acionadas são consumidas, mesmo quando o alvo resiste. Há três tipos de criatura, identificáveis por marcas neutras; descubra suas vulnerabilidades por tentativa e erro. Cada mapa contém um de cada tipo e duas armadilhas de cada categoria; desperdiçar recursos pode tornar a partida impossível, exigindo um novo mapa.
+
+Audição é circular, com metade do alcance antigo (107,5 unidades andando e 137,5 correndo), e detecta movimento mesmo atrás de obstáculos. Visão usa um cone de 60 graus com o alcance antigo (215 unidades andando e 275 correndo), bloqueado pelos obstáculos. Espaço emite um chamado de 230 unidades. O desenho do cone mostra a área visível; a circunferência tracejada mostra o alcance auditivo. Após detectar, monstros perseguem por alguns segundos mesmo sem contato. Velocidades em unidades/segundo: caminhada 140, perseguição 175, corrida 240. Só a corrida permite abrir distância.
 
 Seis biomas visuais, com posições de obstáculos parcialmente aleatórias. Mecânicas iguais entre biomas nesta versão. Interface e controles destinados a teclado e computador; sem controles de toque, áudio ou física dinâmica.
 
@@ -27,7 +29,7 @@ Seis biomas visuais, com posições de obstáculos parcialmente aleatórias. Mec
 npm test
 ```
 
-Os testes cobrem alcance/estado das armadilhas, colisões e linha de visão. Para testar jogabilidade, inicie o servidor e jogue uma partida no navegador.
+Os testes cobrem alcance/estado das armadilhas, consumo contra inimigos resistentes, perigo ao jogador, audição, cone de visão, velocidades, colisões e linha de visão. Para testar jogabilidade, inicie o servidor e jogue uma partida no navegador.
 
 ## GitHub Pages
 

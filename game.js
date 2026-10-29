@@ -10,20 +10,40 @@ export const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 export function trapHits(trap, enemy){return trap.armed&&!trap.used&&distance(trap,enemy)<trap.r+12;}
 export function blocked(x,y,r,walls){return x<r||y<r||x>1000-r||y>620-r||walls.some(w=>x+r>w.x&&x-r<w.x+w.w&&y+r>w.y&&y-r<w.y+w.h);}
 export function lineClear(a,b,walls){const n=Math.ceil(distance(a,b)/8);for(let i=1;i<n;i++){const x=a.x+(b.x-a.x)*i/n,y=a.y+(b.y-a.y)*i/n;if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h))return false;}return true;}
+export const SPEED = {walk:140, run:240, monster:175};
+export const ENEMY_TYPES = ['stria','dot','cross'];
+const weaknesses = {stria:'pit', dot:'rock', cross:'fire'};
+export function vulnerable(enemy,trap){return weaknesses[enemy.kind]===trap.type;}
+export function perception(enemy,player,walls,sprinting=false,moving=true){
+ const range=sprinting?275:215;
+ const angle=Math.atan2(player.y-enemy.y,player.x-enemy.x);
+ const delta=Math.atan2(Math.sin(angle-enemy.angle),Math.cos(angle-enemy.angle));
+ return {hears:moving&&distance(enemy,player)<range/2,
+  sees:distance(enemy,player)<range&&Math.abs(delta)<=Math.PI/6&&lineClear(enemy,player,walls)};
+}
+export function resolveTrap(trap,targets){
+ if(!trap.armed||trap.used)return [];
+ const hits=targets.filter(e=>e.alive&&trapHits(trap,e));
+ if(hits.length||trap.type==='rock'){trap.used=true;trap.armed=false;trap.flash=.7;}
+ return hits.map(enemy=>({enemy,killed:vulnerable(enemy,trap)}));
+}
+export function playerInDanger(trap,player,dropping=false){
+ return trap.armed&&!trap.used&&(trap.type!=='rock'||dropping)&&distance(trap,player)<trap.r+player.r;
+}
 if(typeof document!=='undefined') startGame();
 function startGame(){
  const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
  const ui=id=>document.getElementById(id),keys=new Set();
- let state='intro',player,enemies,traps,walls,biome,particles=[],noise=0,kills=0,clock=0,last=0,nearest=null,spaceLatch=false,triggerLatch=false,lastBiome=-1;
+ let state='intro',player,enemies,traps,walls,biome,particles=[],noise=0,kills=0,clock=0,last=0,nearest=null,spaceLatch=false,triggerLatch=false,lastBiome=-1,feedback='',feedbackTime=0,currentSprint=false;
  function map(){
   let index=Math.floor(Math.random()*6);if(index===lastBiome)index=(index+1)%6;lastBiome=index;biome=BIOMES[index];
   player={x:500,y:535,r:11,stamina:100,angle:-Math.PI/2,exhausted:false};
-  enemies=[{x:150,y:100},{x:500,y:80},{x:850,y:100}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2}));
+  enemies=[{x:150,y:100},{x:500,y:80},{x:850,y:100}].map((e,i)=>({...e,r:13,alive:true,alert:0,angle:0,homeX:e.x,homeY:e.y,phase:i*2,kind:ENEMY_TYPES[(i+index)%3],reaction:0}));
   walls=[{x:290,y:160,w:65,h:100},{x:640,y:160,w:65,h:100},{x:120,y:400,w:95,h:45},{x:785,y:400,w:95,h:45}];
   // Small offsets vary the routes while retaining clear paths through every trap.
   walls.forEach(w=>{w.x+=Math.random()*24-12;w.y+=Math.random()*20-10;});
   traps=[{x:190,y:290,type:'pit'},{x:500,y:245,type:'fire'},{x:810,y:290,type:'rock'},{x:345,y:435,type:'fire'},{x:655,y:435,type:'pit'},{x:500,y:365,type:'rock'}].map(t=>({...t,r:27,armed:false,used:false,progress:0,flash:0}));
-  particles=[];noise=0;kills=0;clock=0;keys.clear();spaceLatch=false;triggerLatch=false;
+  particles=[];noise=0;kills=0;clock=0;feedbackTime=0;currentSprint=false;keys.clear();spaceLatch=false;triggerLatch=false;
   ui('biome').textContent=biome.name;ui('dot').style.background=biome.accent;
  }
  function overlay(title,description,label,eyebrow){ui('title').textContent=title;ui('description').innerHTML=description;ui('play').textContent=label;ui('overline').textContent=eyebrow;ui('overlay').classList.remove('hidden');}
@@ -34,26 +54,37 @@ function startGame(){
  window.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.code==='KeyP'&&!e.repeat)pause();if(e.code==='KeyR'&&!e.repeat)begin();keys.add(e.code);});
  window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();if(state==='playing')pause();});
  function move(entity,dx,dy,r){if(!blocked(entity.x+dx,entity.y,r,walls))entity.x+=dx;if(!blocked(entity.x,entity.y+dy,r,walls))entity.y+=dy;}
- function kill(enemy,trap){enemy.alive=false;kills++;trap.used=true;trap.armed=false;trap.flash=.7;for(let i=0;i<18;i++)particles.push({x:enemy.x,y:enemy.y,vx:(Math.random()-.5)*150,vy:(Math.random()-.5)*150,life:.8,color:'#e89171'});}
+ function kill(enemy,trap){enemy.alive=false;kills++;for(let i=0;i<18;i++)particles.push({x:enemy.x,y:enemy.y,vx:(Math.random()-.5)*150,vy:(Math.random()-.5)*150,life:.8,color:'#e89171'});}
+ function lose(message){if(state!=='playing')return;state='lost';overlay('O plano veio tarde.',message,'Tentar outro mapa →','A CAÇADA TERMINOU');}
+ function activate(trap){
+  const caught=playerInDanger(trap,player,true);
+  const results=resolveTrap(trap,enemies);
+  for(const {enemy,killed} of results){if(killed)kill(enemy,trap);else{enemy.reaction=1.5;feedback='A armadilha foi consumida. Essa criatura resistiu.';feedbackTime=3;}}
+  if(caught)lose('Sua própria armadilha foi fatal. Contorne os círculos ativos e solte pedras de fora da área de impacto.');
+ }
  function update(dt){
-  clock+=dt;noise=Math.max(0,noise-dt);let dx=Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),dy=Number(keys.has('KeyS')||keys.has('ArrowDown'))-Number(keys.has('KeyW')||keys.has('ArrowUp'));let moving=dx!==0||dy!==0;
+  clock+=dt;feedbackTime=Math.max(0,feedbackTime-dt);noise=Math.max(0,noise-dt);let dx=Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),dy=Number(keys.has('KeyS')||keys.has('ArrowDown'))-Number(keys.has('KeyW')||keys.has('ArrowUp'));let moving=dx!==0||dy!==0;
   nearest=traps.filter(t=>!t.used&&distance(player,t)<65).sort((a,b)=>distance(a,player)-distance(b,player))[0];
-  const preparing=keys.has('KeyE')&&nearest&&!nearest.armed;
+  const preparing=keys.has('KeyE')&&nearest&&!nearest.armed&&distance(player,nearest)>=nearest.r+player.r+2;
   const sprint=moving&&!preparing&&(keys.has('ShiftLeft')||keys.has('ShiftRight'))&&!player.exhausted&&player.stamina>0;
+  currentSprint=sprint;
   if(sprint){player.stamina=Math.max(0,player.stamina-30*dt);if(player.stamina===0)player.exhausted=true;}else{player.stamina=Math.min(100,player.stamina+19*dt);if(player.stamina>25)player.exhausted=false;}
-  if(moving&&!preparing){let n=Math.hypot(dx,dy);player.angle=Math.atan2(dy,dx);move(player,dx/n*(sprint?240:140)*dt,dy/n*(sprint?240:140)*dt,11);}
-  if(keys.has('Space')&&!spaceLatch){noise=1.5;enemies.filter(e=>e.alive&&distance(e,player)<460).forEach(e=>e.alert=5);}spaceLatch=keys.has('Space');
+  if(moving&&!preparing){let n=Math.hypot(dx,dy);player.angle=Math.atan2(dy,dx);move(player,dx/n*(sprint?SPEED.run:SPEED.walk)*dt,dy/n*(sprint?SPEED.run:SPEED.walk)*dt,11);}
+  if(keys.has('Space')&&!spaceLatch){noise=1.5;enemies.filter(e=>e.alive&&distance(e,player)<230).forEach(e=>e.alert=5);}spaceLatch=keys.has('Space');
   traps.forEach(t=>{t.flash=Math.max(0,t.flash-dt);if(t===nearest&&preparing){t.progress+=dt;if(t.progress>=1){t.armed=true;t.progress=0;triggerLatch=true;}}else t.progress=0;});
-  if(nearest?.armed&&nearest.type==='rock'&&keys.has('KeyE')&&!triggerLatch){nearest.flash=.7;enemies.filter(e=>e.alive&&trapHits(nearest,e)).forEach(e=>kill(e,nearest));nearest.used=true;nearest.armed=false;triggerLatch=true;}
+  if(nearest?.armed&&nearest.type==='rock'&&keys.has('KeyE')&&!triggerLatch){activate(nearest);triggerLatch=true;}
+  if(state!=='playing')return;
+  for(const trap of traps){if(playerInDanger(trap,player)){lose('Você entrou em uma armadilha ativa. Prepare de fora do círculo e contorne o perigo.');return;}}
   if(!keys.has('KeyE'))triggerLatch=false;
   for(const enemy of enemies){if(!enemy.alive)continue;
-   let sees=distance(player,enemy)<(sprint?275:215)&&lineClear(enemy,player,walls);
-   if(sees)enemy.alert=4;else enemy.alert=Math.max(0,enemy.alert-dt);
+   enemy.reaction=Math.max(0,enemy.reaction-dt);
+   const senses=perception(enemy,player,walls,sprint,moving&&!preparing);
+   if(senses.sees||senses.hears)enemy.alert=4;else enemy.alert=Math.max(0,enemy.alert-dt);
    let target=enemy.alert>0?player:{x:enemy.homeX+Math.sin(clock*.45+enemy.phase)*45,y:enemy.homeY+Math.cos(clock*.5+enemy.phase)*26};
    let vx=target.x-enemy.x,vy=target.y-enemy.y,n=Math.hypot(vx,vy);enemy.angle=Math.atan2(vy,vx);
-   if(n>3)move(enemy,vx/n*(enemy.alert>0?116:33)*dt,vy/n*(enemy.alert>0?116:33)*dt,13);
-   for(const trap of traps){if(trap.type!=='rock'&&trapHits(trap,enemy)){kill(enemy,trap);break;}}
-   if(enemy.alive&&distance(enemy,player)<23){state='lost';overlay('O plano veio tarde.','Você foi alcançado. Prepare as armadilhas antes de chamar atenção.<br><b>Dica:</b> caminhar já é mais rápido que um monstro; guarde a corrida para escapar.','Tentar outro mapa →','A CAÇADA TERMINOU');break;}
+   if(n>3)move(enemy,vx/n*(enemy.alert>0?SPEED.monster:33)*dt,vy/n*(enemy.alert>0?SPEED.monster:33)*dt,13);
+   for(const trap of traps){if(trap.type!=='rock'&&trapHits(trap,enemy)){activate(trap);break;}}
+   if(enemy.alive&&distance(enemy,player)<23){lose('Você foi alcançado. Monstros correm mais que sua caminhada.<br>Reserve fôlego para fugir e contorne suas armadilhas.');break;}
   }
   if(kills===3&&state==='playing'){state='won';overlay('Você virou o jogo.','Três predadores. Nenhuma arma.<br>O terreno fez o trabalho — o plano foi seu.','Caçar em outro bioma →','ÁREA SEGURA / 3 DE 3');}
   particles.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;});particles=particles.filter(p=>p.life>0);
@@ -73,13 +104,16 @@ function startGame(){
    if(t.flash){ctx.fillStyle=`rgba(230,199,121,${t.flash})`;ctx.beginPath();ctx.arc(0,0,38*(1-t.flash/2),0,Math.PI*2);ctx.fill();}
    text(t.used?'USADA':t.type==='pit'?'BURACO':t.type==='fire'?'FOGO':'PEDRA',0,43,color,9);if(t.armed&&!t.used)text(t.type==='rock'?'E · SOLTAR':'PRONTA',0,-37,color,8);ctx.restore();
   });
-  enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);if(e.alert>0){ctx.strokeStyle='#e9927140';ctx.beginPath();ctx.arc(0,0,23+Math.sin(clock*6)*3,0,Math.PI*2);ctx.stroke();text('!',0,-29,'#f3aa87',16);}ctx.rotate(e.angle);ctx.fillStyle=e.alert>0?'#ef916d':'#b97c67';ctx.fillRect(-12,-12,24,24);ctx.fillStyle='#37271f';ctx.fillRect(5,-6,4,4);ctx.fillRect(5,3,4,4);ctx.restore();});
+  enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.angle);ctx.fillStyle='#ed9c7020';ctx.strokeStyle='#ed9c7044';ctx.beginPath();ctx.moveTo(0,0);
+   const range=currentSprint?275:215;
+   for(let a=-Math.PI/6;a<=Math.PI/6+.001;a+=Math.PI/120){let r=0;while(r<range){const x=e.x+Math.cos(e.angle+a)*(r+5),y=e.y+Math.sin(e.angle+a)*(r+5);if(walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h))break;r+=5;}ctx.lineTo(Math.cos(a)*Math.min(r,range),Math.sin(a)*Math.min(r,range));}ctx.closePath();ctx.fill();ctx.stroke();ctx.setLineDash([2,7]);ctx.beginPath();ctx.arc(0,0,range/2,0,Math.PI*2);ctx.stroke();ctx.restore();});
+  enemies.forEach(e=>{if(!e.alive)return;ctx.save();ctx.translate(e.x,e.y);if(e.alert>0){ctx.strokeStyle='#e9927140';ctx.beginPath();ctx.arc(0,0,23+Math.sin(clock*6)*3,0,Math.PI*2);ctx.stroke();text('!',0,-29,'#f3aa87',16);}if(e.reaction>0)text('RESISTIU',0,-42,'#ffd0a1',9);ctx.rotate(e.angle);ctx.fillStyle=e.alert>0?'#ef916d':'#b97c67';ctx.fillRect(-12,-12,24,24);ctx.strokeStyle='#eed5bd';ctx.lineWidth=2;ctx.beginPath();if(e.kind==='stria'){ctx.moveTo(-7,-7);ctx.lineTo(-7,7);}else if(e.kind==='dot'){ctx.arc(-5,0,3,0,Math.PI*2);}else{ctx.moveTo(-8,-4);ctx.lineTo(-1,4);ctx.moveTo(-8,4);ctx.lineTo(-1,-4);}ctx.stroke();ctx.fillStyle='#37271f';ctx.fillRect(5,-6,4,4);ctx.fillRect(5,3,4,4);ctx.restore();});
   if(noise>0){ctx.strokeStyle=`rgba(211,236,155,${noise/2})`;ctx.beginPath();ctx.arc(player.x,player.y,30+(1.5-noise)*190,0,Math.PI*2);ctx.stroke();}
   ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);ctx.shadowColor='#dcf6a0';ctx.shadowBlur=14;ctx.fillStyle='#dcf6a0';ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-10,-10);ctx.lineTo(-6,0);ctx.lineTo(-10,10);ctx.closePath();ctx.fill();ctx.restore();
   particles.forEach(p=>{ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,4,4);});ctx.globalAlpha=1;
   ui('kills').textContent=`${kills} / 3 ELIMINADOS`;ui('stamina').value=player.stamina;
-  const chasing=enemies.some(e=>e.alive&&e.alert>0);ui('status').textContent=state==='paused'?'PAUSADO':chasing?'! VOCÊ FOI VISTO':'PREPARE O TERRENO';ui('status').style.color=chasing?'#efa47f':'#a1ae97';
-  ui('hint').textContent=nearest?(nearest.armed?(nearest.type==='rock'?'E · Soltar pedra agora. Só acerte quando o monstro estiver no círculo.':'Armadilha pronta. Atraia um monstro até o círculo.'):'Segure E · '+(nearest.type==='pit'?'Descobrir buraco':nearest.type==='fire'?'Acender poça':'Preparar pedra')):'Espaço · Fazer barulho e atrair monstros próximos. Você pode atravessar suas armadilhas.';
+  const chasing=enemies.some(e=>e.alive&&e.alert>0);ui('status').textContent=state==='paused'?'PAUSADO':chasing?'! EM PERSEGUIÇÃO':'PREPARE O TERRENO';ui('status').style.color=chasing?'#efa47f':'#a1ae97';
+  ui('hint').textContent=feedbackTime>0?feedback:nearest?(nearest.armed?(nearest.type==='rock'?'E · Soltar pedra agora. Só acerte quando o monstro estiver no círculo.':'Armadilha pronta. Atraia um monstro até o círculo.'):(distance(player,nearest)<nearest.r+player.r+2?'Afaste-se do círculo para preparar · ':'Segure E · ')+(nearest.type==='pit'?'Descobrir buraco':nearest.type==='fire'?'Acender poça':'Preparar pedra')):'Espaço · Fazer barulho e atrair monstros próximos. Contorne armadilhas ativas. Observe quais criaturas resistem.';
  }
  map();function frame(now){let dt=Math.min((now-last)/1000,.035);last=now;if(state==='playing')update(dt);draw();requestAnimationFrame(frame);}requestAnimationFrame(frame);
 }
