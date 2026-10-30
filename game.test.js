@@ -140,8 +140,8 @@ test('aim needs full two seconds stationary, early release or movement cancels s
  assert.equal(updateAim(result.progress,false,false,true,.02).fire,true);assert.equal(updateAim(2,false,false,false,.02).fire,false);
  assert.equal(updateAim(2,true,true,true,.02).progress,0);assert.equal(updateAim(2,false,true,true,.02).fire,false);
 });
-test('arrow hits bear through swept collision and starts ten second poison, not instant death',()=>{
- const bear=enemy('bear',600,500),arrow={x:500,y:500,angle:0,remaining:900};assert.equal(advanceArrow(arrow,.2,[bear],[]),true);assert.equal(bear.poison,10);assert.equal(bear.alive,true);
+test('bear survives one arrow and ten-second poison starts only on the second hit',()=>{
+ const bear=enemy('bear',600,500),arrow={x:500,y:500,angle:0,remaining:900};assert.equal(advanceArrow(arrow,.2,[bear],[]),true);assert.equal(bear.poison,null);assert.equal(bear.poisonHits,1);assert.equal(tickEnemy(bear,20),false);advanceArrow({x:500,y:500,angle:0,remaining:900},.2,[bear],[]);assert.equal(bear.poisonHits,2);assert.equal(bear.poison,10);assert.equal(bear.alive,true);
  assert.equal(tickEnemy(bear,9.99),false);assert.ok(bear.poison>0);assert.equal(tickEnemy(bear,.01),true);assert.equal(bear.poison,0);
 });
 test('arrows collide with obstacles, misses expire and repeated poison hits do not reset timer',()=>{
@@ -155,6 +155,40 @@ test('resource crafting, five-second snare, charged shot and delayed boss death 
  const bear=enemy(),snare=trap('snare');resolveTrap(snare,[bear]);assert.equal(bear.immobilized,5);
  const charged=updateAim(0,true,false,false,2);tickEnemy(bear,2);assert.equal(bear.immobilized,3);assert.equal(updateAim(charged.progress,false,false,true,.01).fire,true);
  profile=spendConsumable(profile,'arrows');assert.equal(profile.arrows,2);
- advanceArrow({x:400,y:500,angle:0,remaining:900},.2,[bear],[]);assert.equal(bear.poison,10);
+ advanceArrow({x:400,y:500,angle:0,remaining:900},.2,[bear],[]);assert.equal(bear.poison,null);advanceArrow({x:400,y:500,angle:0,remaining:900},.2,[bear],[]);assert.equal(bear.poison,10);
  for(let i=0;i<99;i++)assert.equal(tickEnemy(bear,.1),false);assert.equal(tickEnemy(bear,.1),true);
+});
+
+import {ACTIONS,DEFAULT_BINDINGS,normalizeBindings,rebind,validBinding,keyName,generateMud,updateMud,updatePursuit,MUD_SECONDS,applyPoison,iconSVG} from './game.js';
+test('normal animals die from one arrow after five seconds, extra hits do not reset timer',()=>{
+ for(const kind of ENEMY_TYPES){const e=enemy(kind);advanceArrow({x:400,y:500,angle:0,remaining:900},.2,[e],[]);assert.equal(e.poison,5);assert.equal(tickEnemy(e,4.99),false);applyPoison(e);assert.ok(e.poison<.02);assert.equal(tickEnemy(e,.01),true);}
+});
+test('key bindings cover every action, migrate safely and reject unsupported keys',()=>{
+ const defaults=normalizeBindings(null);assert.deepEqual(defaults,DEFAULT_BINDINGS);assert.deepEqual(Object.keys(defaults),Object.keys(ACTIONS));assert.equal(new Set(Object.values(defaults)).size,Object.keys(ACTIONS).length);
+ assert.equal(validBinding('Mouse2'),true);assert.equal(validBinding('ArrowLeft'),true);assert.equal(validBinding('Escape'),false);assert.equal(validBinding('<script>'),false);
+ const dirty=normalizeBindings({up:'KeyX',down:'KeyX',prepare:'invalid'});assert.equal(new Set(Object.values(dirty)).size,Object.keys(ACTIONS).length);assert.equal(dirty.prepare,'KeyE');
+});
+test('binding conflicts swap actions, persist on normalization and do not modify originals',()=>{
+ const original=normalizeBindings(null),changed=rebind(original,'up','KeyS');assert.equal(changed.up,'KeyS');assert.equal(changed.down,'KeyW');assert.equal(original.up,'KeyW');
+ const mouse=rebind(changed,'aim','Mouse2');assert.equal(mouse.aim,'Mouse2');assert.deepEqual(normalizeBindings(JSON.parse(JSON.stringify(mouse))),mouse);
+ assert.equal(rebind(original,'unknown','KeyX'),null);assert.equal(rebind(original,'aim','Escape'),null);assert.equal(keyName('KeyG'),'G');assert.equal(keyName('Mouse2'),'Mouse dir.');
+});
+test('pursuit never expires on distance alone and mud only hides an undetected player',()=>{
+ const e=enemy('wolf'),p={mud:0};updatePursuit(e,p,{sees:true,hears:false});assert.equal(e.chasing,true);
+ for(let i=0;i<1000;i++)updatePursuit(e,p,{sees:false,hears:false});assert.equal(e.chasing,true);
+ p.mud=12;updatePursuit(e,p,{sees:true,hears:false});assert.equal(e.chasing,true);updatePursuit(e,p,{sees:false,hears:true});assert.equal(e.chasing,true);
+ e.x=900;e.y=800;updatePursuit(e,p,{sees:false,hears:false});assert.equal(e.chasing,false);assert.equal(e.alert,0);assert.equal(e.homeX,900);assert.equal(e.homeY,800);
+ p.mud=0;updatePursuit(e,p,{sees:false,hears:false});assert.equal(e.chasing,false);updatePursuit(e,p,{sees:true,hears:false});assert.equal(e.chasing,true);
+});
+test('mud status is temporary, pools reusable and flying does not coat player',()=>{
+ const pool={x:500,y:500,r:50},p={x:500,y:500,flying:false,mud:0};updateMud(p,[pool],.1);assert.equal(p.mud,MUD_SECONDS);
+ p.x=800;updateMud(p,[pool],5);assert.equal(p.mud,7);updateMud(p,[pool],7);assert.equal(p.mud,0);
+ p.x=500;updateMud(p,[pool],.1);assert.equal(p.mud,12);assert.deepEqual(pool,{x:500,y:500,r:50});
+ p.flying=true;p.mud=0;updateMud(p,[pool],.1);assert.equal(p.mud,0);
+});
+test('eight reusable mud pools spawn without covering obstacles or trap and clue areas',()=>{
+ const random=randomSource(986);for(let i=0;i<50;i++){const player={x:1250,y:1350},enemies=createEnemies(i+1),walls=generateWalls([player,...enemies],random),traps=generateTraps(walls,player,enemies,random),clues=generateClues(walls,traps,random),pools=generateMud(walls,traps,clues,[player,...enemies],random);assert.equal(pools.length,8);for(const p of pools){assert.equal(blocked(p.x,p.y,75,walls),false);assert.ok(traps.every(t=>distance(t,p)>t.r+p.r+35));assert.ok(clues.every(c=>distance(c,p)>p.r+30));}}
+});
+test('all resources and craft recipes have self-contained accessible decorative SVG icons',()=>{
+ for(const kind of ['fangs','wings','hide','bones',...Object.keys(SHOP)]){const svg=iconSVG(kind);assert.match(svg,/<svg/);assert.match(svg,/aria-hidden="true"/);assert.match(svg,/<path/);assert.ok(!svg.includes('http'));}
 });
